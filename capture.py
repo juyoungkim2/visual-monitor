@@ -19,7 +19,7 @@ def make_driver():
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) KREAM-DesignBot")
-    return webdriver.Chrome(options=opts)
+    return webdriver.Chrome(options=opts)   # ← PATH에 깔린 맞춤 드라이버 사용
 
 def main():
     with open("targets.json", encoding="utf-8") as f:
