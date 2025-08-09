@@ -2,8 +2,10 @@ name: Visual Monitor
 
 on:
   schedule:
-    - cron: "0 23 * * *"  # 매일 오전 8시 (UTC 23시는 한국 8시)
-  workflow_dispatch:      # 수동 실행도 가능
+    # UTC 기준 (한국시간 -9시간)
+    - cron: "0 1 * * *"   # 한국 오전 10시 (UTC 01시)
+    - cron: "0 9 * * *"   # 한국 오후 6시 (UTC 09시)
+  workflow_dispatch:
 
 jobs:
   run-script:
