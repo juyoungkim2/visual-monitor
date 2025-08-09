@@ -1,12 +1,10 @@
 [
-  {
-    "name": "Google",
-    "url": "https://www.google.com",
-    "wait_selector": "body"
-  },
-  {
-    "name": "GitHub",
-    "url": "https://github.com",
-    "wait_selector": "body"
-  }
+    {
+        "name": "google",
+        "url": "https://www.google.com"
+    },
+    {
+        "name": "github",
+        "url": "https://github.com"
+    }
 ]
