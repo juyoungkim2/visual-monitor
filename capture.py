@@ -2,7 +2,7 @@ import json, os, time, datetime
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service  # Selenium Manager
+from selenium.webdriver.chrome.service import Service  # Selenium Manager 사용
 
 # 날짜별 폴더
 OUT_DIR = Path("shots") / datetime.datetime.now().strftime("%Y-%m-%d")
@@ -10,7 +10,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def make_driver():
     opts = Options()
-    # setup-chrome 액션이 넘겨준 경로가 있으면 사용
+    # setup-chrome가 제공하는 바이너리 경로가 있으면 사용
     if os.environ.get("CHROME_BIN"):
         opts.binary_location = os.environ["CHROME_BIN"]
     opts.add_argument("--headless=new")
@@ -20,11 +20,18 @@ def make_driver():
     opts.add_argument("--no-sandbox")
     opts.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) KREAM-DesignBot")
 
-    # ✅ 경로 미지정 Service() → Selenium Manager가 현재 Chrome에 맞는 드라이버 자동 설치/사용
+    # 경로 미지정 Service() → Selenium Manager가 현재 Chrome에 맞는 드라이버 자동 설치/사용
     service = Service()
     return webdriver.Chrome(service=service, options=opts)
 
 def main():
+    # 오늘 폴더에 남아있는 지난 실행 PNG는 제거 (google/github 같은 잔재 방지)
+    for p in OUT_DIR.glob("*.png"):
+        try:
+            p.unlink()
+        except Exception:
+            pass
+
     with open("targets.json", encoding="utf-8") as f:
         targets = json.load(f)
 
