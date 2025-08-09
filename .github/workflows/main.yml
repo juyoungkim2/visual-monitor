@@ -2,8 +2,8 @@ name: Visual Monitor
 
 on:
   schedule:
-    - cron: "0 1 * * *"   # KST 10:00 (UTC 01:00)
-    - cron: "0 9 * * *"   # KST 18:00 (UTC 09:00)
+    - cron: "0 1 * * *"   # KST 10:00
+    - cron: "0 9 * * *"   # KST 18:00
   workflow_dispatch: {}
 
 permissions:
@@ -12,7 +12,6 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
