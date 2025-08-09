@@ -1,27 +1,48 @@
 import os
-import requests
 from pathlib import Path
+from urllib.parse import quote
+import requests
+
+WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL")
+REPO    = os.environ.get("GITHUB_REPOSITORY")
+BRANCH  = os.environ.get("GITHUB_REF_NAME", "main")
+
+def latest_dir() -> Path|None:
+    root = Path("shots")
+    if not root.exists(): return None
+    dirs = [p for p in root.iterdir() if p.is_dir()]
+    return sorted(dirs)[-1] if dirs else None
+
+def raw_url(p: Path) -> str:
+    return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{quote(str(p))}"
 
 def main():
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
-    if not webhook_url:
-        print("No Slack webhook URL set.")
+    if not WEBHOOK:
+        print("No SLACK_WEBHOOK_URL secret.")
         return
 
-    today_dir = Path("shots") / Path().cwd().name
-    if not today_dir.exists():
-        today_dir = Path("shots")
+    d = latest_dir()
+    if not d:
+        requests.post(WEBHOOK, json={"text":"📸 오늘 캡처 없음"})
+        return
 
-    attachments = []
-    for img_path in sorted(today_dir.glob("*.png")):
-        attachments.append({
-            "title": img_path.name,
-            "image_url": f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY')}/main/{img_path}"
-        })
+    imgs = sorted(d.glob("*.png"))
+    if not imgs:
+        requests.post(WEBHOOK, json={"text":f"📸 {d.name} 캡처 이미지 없음"})
+        return
 
-    payload = {"text": f"📸 Daily Screenshots ({today_dir.name})", "attachments": attachments}
-    resp = requests.post(webhook_url, json=payload)
-    print(f"Slack response: {resp.status_code} {resp.text}")
+    blocks = [
+        {"type":"header","text":{"type":"plain_text","text":f"📸 경쟁사 메인 캡처 - {d.name}"}}
+    ]
+    for p in imgs[:10]:  # 최대 10장
+        site = p.stem
+        blocks += [
+            {"type":"section","text":{"type":"mrkdwn","text":f"*{site}*"}},
+            {"type":"image","image_url": raw_url(p), "alt_text": site}
+        ]
+
+    r = requests.post(WEBHOOK, json={"text":"Visual monitor", "blocks":blocks}, timeout=20)
+    print("Slack response:", r.status_code, r.text)
 
 if __name__ == "__main__":
     main()
