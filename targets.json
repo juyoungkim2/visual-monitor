@@ -1,10 +1,5 @@
 [
-    {
-        "name": "google",
-        "url": "https://www.google.com"
-    },
-    {
-        "name": "github",
-        "url": "https://github.com"
-    }
+  { "name": "musinsa", "url": "https://www.musinsa.com/" },
+  { "name": "29cm",    "url": "https://www.29cm.co.kr/" },
+  { "name": "wconcept","url": "https://www.wconcept.co.kr/" }
 ]
