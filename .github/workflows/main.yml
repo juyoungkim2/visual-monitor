@@ -16,15 +16,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
+      # 구형 chromedriver 제거 (버전 충돌 방지)
       - name: Remove preinstalled chromedriver
         run: |
           sudo rm -f /usr/bin/chromedriver || true
           which chromedriver || echo "No system chromedriver"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Setup Chrome (stable)
         id: chrome
