@@ -1,0 +1,5 @@
+[
+  {"name":"MUSINSA","url":"https://www.musinsa.com/","selector":".swiper, .visual"},
+  {"name":"29CM","url":"https://www.29cm.co.kr/","selector":".main-visual, .swiper"},
+  {"name":"W CONCEPT","url":"https://www.wconcept.co.kr/","selector":".main_visual, .swiper-container"}
+]
