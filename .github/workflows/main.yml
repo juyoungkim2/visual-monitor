@@ -2,17 +2,16 @@ name: Visual Monitor
 
 on:
   schedule:
-    - cron: "0 1 * * *"   # KST 10:00 (UTC+0 01:00)
-    - cron: "0 9 * * *"   # KST 18:00 (UTC+0 09:00)
-  workflow_dispatch: {}   # 수동 실행 버튼
+    - cron: "0 1 * * *" # 매일 KST 10:00 (UTC+1)
+    - cron: "0 9 * * *" # 매일 KST 18:00 (UTC+9)
+  workflow_dispatch:
 
 permissions:
-  contents: write         # 캡처 이미지를 커밋/푸시하려면 필요
+  contents: write
 
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,19 +38,17 @@ jobs:
       - name: Capture screenshots
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
-        run: |
-          python capture.py
+        run: python capture.py
 
       - name: Commit & push screenshots
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add shots/ || true
-          git commit -m "shots: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || echo "No changes"
+          git commit -m "shots: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" || echo "No changes"
           git push || true
 
       - name: Post to Slack
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          python post_to_slack.py
+        run: python post_to_slack.py
