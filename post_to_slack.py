@@ -7,7 +7,7 @@ WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL")
 REPO    = os.environ.get("GITHUB_REPOSITORY")
 BRANCH  = os.environ.get("GITHUB_REF_NAME", "main")
 
-def latest_dir() -> Path|None:
+def latest_dir() -> Path | None:
     root = Path("shots")
     if not root.exists(): return None
     dirs = [p for p in root.iterdir() if p.is_dir()]
@@ -31,17 +31,15 @@ def main():
         requests.post(WEBHOOK, json={"text":f"📸 {d.name} 캡처 이미지 없음"})
         return
 
-    blocks = [
-        {"type":"header","text":{"type":"plain_text","text":f"📸 경쟁사 메인 캡처 - {d.name}"}}
-    ]
-    for p in imgs[:10]:  # 최대 10장
+    blocks = [{"type":"header","text":{"type":"plain_text","text":f"📸 경쟁사 메인 캡처 - {d.name}"}}]
+    for p in imgs[:10]:
         site = p.stem
         blocks += [
             {"type":"section","text":{"type":"mrkdwn","text":f"*{site}*"}},
             {"type":"image","image_url": raw_url(p), "alt_text": site}
         ]
 
-    r = requests.post(WEBHOOK, json={"text":"Visual monitor", "blocks":blocks}, timeout=20)
+    r = requests.post(WEBHOOK, json={"text":"Visual monitor", "blocks": blocks}, timeout=20)
     print("Slack response:", r.status_code, r.text)
 
 if __name__ == "__main__":
