@@ -21,6 +21,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Remove preinstalled chromedriver
+        run: |
+          sudo rm -f /usr/bin/chromedriver || true
+          which chromedriver || echo "No system chromedriver"
+
       - name: Setup Chrome (stable)
         id: chrome
         uses: browser-actions/setup-chrome@v1
