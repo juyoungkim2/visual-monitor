@@ -11,13 +11,14 @@ SURFIT_BASE = "https://www.surfit.io"
 LIST_PAGES = [
     "https://www.surfit.io/",
     "https://www.surfit.io/discover",
+    "https://www.surfit.io/discover?sort=new",
 ]
 MAX_ITEMS = 8                 # 한 번에 보낼 최대 개수
 CACHE = Path(".cache/surfit_seen.json")
 WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL")
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SurfitSlackBot/1.2",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SurfitSlackBot/1.3",
     "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
 }
 TIMEOUT = 15
@@ -47,17 +48,50 @@ def save_seen(seen):
         encoding="utf-8",
     )
 
-def extract_article_urls_from_html(html: str):
-    """JS 렌더링 없이 /article/ 링크만 정규식으로 수집"""
+# --- 핵심: __NEXT_DATA__에서 아티클 URL 추출 ---
+def extract_from_next_data(html: str):
+    soup = BeautifulSoup(html, "html.parser")
+    tag = soup.find("script", id="__NEXT_DATA__", type="application/json")
+    if not tag or not tag.text:
+        return []
+
     urls = set()
 
-    # 절대경로
+    try:
+        data = json.loads(tag.text)
+    except Exception:
+        return []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for v in node.values(): walk(v)
+        elif isinstance(node, list):
+            for v in node: walk(v)
+        elif isinstance(node, str):
+            s = node.strip()
+            # 1) /article/slug 형태 직접 수집
+            if s.startswith("/article/"):
+                urls.add(urljoin(SURFIT_BASE, s))
+            # 2) slug만 떨어지는 경우(영숫자-언더스코어-하이픈) → 조합
+            elif re.fullmatch(r"[A-Za-z0-9\-_]{8,}", s):
+                urls.add(urljoin(SURFIT_BASE, f"/article/{s}"))
+
+    walk(data)
+    return list(urls)
+
+def extract_article_urls_from_html(html: str):
+    """정규식 + __NEXT_DATA__ 병행"""
+    urls = set()
+
+    # 정규식(백업 경로)
     for u in re.findall(r"https?://www\.surfit\.io/article/[A-Za-z0-9\-_]+", html):
         urls.add(u)
-
-    # 상대경로
     for u in re.findall(r'"(/article/[A-Za-z0-9\-_]+)"', html):
         urls.add(urljoin(SURFIT_BASE, u))
+
+    # __NEXT_DATA__ 파싱
+    for u in extract_from_next_data(html):
+        urls.add(u)
 
     return list(urls)
 
@@ -149,7 +183,7 @@ def main():
     ensure_cache()
     seen = load_seen()
 
-    # 0) 웹훅 핑(최초 1회 확인용) — 실패해도 계속 진행
+    # 0) 웹훅 핑(확인용) — 실패해도 계속
     try:
         send_ping()
     except Exception as e:
