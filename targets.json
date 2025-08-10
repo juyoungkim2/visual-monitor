@@ -1,7 +1,7 @@
 [
   {
     "name": "musinsa",
-    "url": "https://www.musinsa.com/app/",
+    "url": "https://www.musinsa.com/main/musinsa/recommend",
     "wait_selector": "body"
   },
   {
