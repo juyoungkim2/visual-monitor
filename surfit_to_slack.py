@@ -181,7 +181,7 @@ def main():
     new_urls = [u for u in uniq if article_id(u) not in seen]
     print(f"[DEBUG] total uniq: {len(uniq)}, new: {len(new_urls)}")
 
-    # 3) 보낼 목록 결정 (신규 없으면 상위 5개라도 보내서 형태 확인)
+    # 3) 보낼 목록 결정 (신규 없으면 상위 5개라도 보내기)
     send_urls = new_urls if new_urls else uniq[:5]
     if not send_urls:
         print("[ERROR] No article URLs extracted at all. Stop.")
@@ -195,4 +195,9 @@ def main():
         for u in new_urls:
             seen.add(article_id(u))
         save_seen(seen)
-        print(f"[DEBUG] cache updated, total
+        print(f"[DEBUG] cache updated, total seen={len(seen)}")
+    else:
+        print("[DEBUG] no cache update")
+
+if __name__ == "__main__":
+    main()
