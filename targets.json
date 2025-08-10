@@ -1,4 +1,12 @@
 [
-  { "name": "musinsa",  "url": "https://www.musinsa.com/" },
-  { "name": "29cm",     "url": "https://www.29cm.co.kr/" }
+  {
+    "name": "musinsa",
+    "url": "https://www.musinsa.com/app/",
+    "wait_selector": "body"
+  },
+  {
+    "name": "29cm",
+    "url": "https://www.29cm.co.kr/",
+    "wait_selector": "body"
+  }
 ]
