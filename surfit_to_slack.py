@@ -1,7 +1,7 @@
 import os, json, re, time
 import datetime as dt
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,7 +18,7 @@ CACHE = Path(".cache/surfit_seen.json")
 WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL")
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SurfitSlackBot/1.3",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SurfitSlackBot/1.4",
     "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
 }
 TIMEOUT = 15
@@ -48,53 +48,106 @@ def save_seen(seen):
         encoding="utf-8",
     )
 
-# --- 핵심: __NEXT_DATA__에서 아티클 URL 추출 ---
-def extract_from_next_data(html: str):
+# ---------- 공통 추출 유틸 ----------
+def walk_collect(node, urls: set):
+    """JSON 트리 전체를 돌며 /article/ 또는 슬러그 모양의 문자열을 수집"""
+    if isinstance(node, dict):
+        for v in node.values(): walk_collect(v, urls)
+    elif isinstance(node, list):
+        for v in node: walk_collect(v, urls)
+    elif isinstance(node, str):
+        s = node.strip()
+        if s.startswith("/article/"):
+            urls.add(urljoin(SURFIT_BASE, s))
+        elif re.fullmatch(r"[A-Za-z0-9\-_]{8,}", s):
+            urls.add(urljoin(SURFIT_BASE, f"/article/{s}"))
+
+def extract_from_next_script(html: str):
+    """<script id="__NEXT_DATA__"> JSON에서 추출 (type 유무 상관없음)"""
     soup = BeautifulSoup(html, "html.parser")
-    tag = soup.find("script", id="__NEXT_DATA__", type="application/json")
+    tag = soup.find("script", id="__NEXT_DATA__")
     if not tag or not tag.text:
         return []
-
-    urls = set()
-
     try:
         data = json.loads(tag.text)
     except Exception:
         return []
-
-    def walk(node):
-        if isinstance(node, dict):
-            for v in node.values(): walk(v)
-        elif isinstance(node, list):
-            for v in node: walk(v)
-        elif isinstance(node, str):
-            s = node.strip()
-            # 1) /article/slug 형태 직접 수집
-            if s.startswith("/article/"):
-                urls.add(urljoin(SURFIT_BASE, s))
-            # 2) slug만 떨어지는 경우(영숫자-언더스코어-하이픈) → 조합
-            elif re.fullmatch(r"[A-Za-z0-9\-_]{8,}", s):
-                urls.add(urljoin(SURFIT_BASE, f"/article/{s}"))
-
-    walk(data)
+    urls = set()
+    walk_collect(data, urls)
     return list(urls)
 
-def extract_article_urls_from_html(html: str):
-    """정규식 + __NEXT_DATA__ 병행"""
+def find_build_id(html: str):
+    """HTML 내 buildId 추출 (Next.js)"""
+    m = re.search(r'"buildId"\s*:\s*"([A-Za-z0-9\-_]+)"', html)
+    if m:
+        return m.group(1)
+    # link preload로도 노출되는 경우
+    m2 = re.search(r"/_next/data/([A-Za-z0-9\-_]+)/", html)
+    if m2:
+        return m2.group(1)
+    return None
+
+def route_to_data_path(route: str):
+    """페이지 경로를 Next data JSON 경로로 변환"""
+    parsed = urlparse(route)
+    path = parsed.path or "/"
+    q = parsed.query
+
+    if path == "/" or path == "":
+        json_path = "/index.json"
+    else:
+        # /discover -> /discover.json
+        if not path.endswith(".json"):
+            json_path = f"{path}.json"
+        else:
+            json_path = path
+
+    if q:
+        json_path = f"{json_path}?{q}"
+    return json_path
+
+def extract_via_next_data_api(html: str, route_url: str):
+    """buildId로 /_next/data/{buildId}/...json을 요청해 추출"""
+    build = find_build_id(html)
+    if not build:
+        return []
+
+    data_path = route_to_data_path(route_url)
+    data_url = urljoin(SURFIT_BASE, f"/_next/data/{build}{data_path}")
+    try:
+        r = fetch(data_url)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+    except Exception:
+        return []
+
+    urls = set()
+    walk_collect(data, urls)
+    return list(urls)
+
+def extract_article_urls_from_html(html: str, route_url: str):
+    """정규식 + __NEXT_DATA__ + /_next/data/BUILD/*.json 3중 백업"""
     urls = set()
 
-    # 정규식(백업 경로)
+    # 1) 정규식(직접 노출 대비)
     for u in re.findall(r"https?://www\.surfit\.io/article/[A-Za-z0-9\-_]+", html):
         urls.add(u)
     for u in re.findall(r'"(/article/[A-Za-z0-9\-_]+)"', html):
         urls.add(urljoin(SURFIT_BASE, u))
 
-    # __NEXT_DATA__ 파싱
-    for u in extract_from_next_data(html):
+    # 2) __NEXT_DATA__ 스크립트
+    for u in extract_from_next_script(html):
         urls.add(u)
+
+    # 3) buildId 기반 JSON
+    if not urls:
+        for u in extract_via_next_data_api(html, route_url):
+            urls.add(u)
 
     return list(urls)
 
+# ---------- 메타/슬랙 ----------
 def parse_meta(url: str):
     """개별 글에서 og:title / og:description 읽기"""
     try:
@@ -172,31 +225,29 @@ def post_to_slack(blocks) -> bool:
         return False
 
 def send_ping():
-    """웹훅 동작 확인용 테스트 메시지(기사 0건이어도 전송)"""
     now = dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = {"text": f"[Surfit Bot] ping {now}"}
     r = requests.post(WEBHOOK, json=payload, timeout=20)
     print("[DEBUG] Slack response (ping):", r.status_code, r.text[:200])
     return r.ok
 
+# ---------- 메인 ----------
 def main():
     ensure_cache()
     seen = load_seen()
 
-    # 0) 웹훅 핑(확인용) — 실패해도 계속
     try:
         send_ping()
     except Exception as e:
         print("[WARN] ping failed:", e)
 
-    # 1) 리스트에서 링크 수집
     candidates = []
     for page in LIST_PAGES:
         try:
             res = fetch(page)
             print(f"[DEBUG] fetch {page} -> {res.status_code}")
             if res.status_code == 200 and res.text:
-                urls = extract_article_urls_from_html(res.text)
+                urls = extract_article_urls_from_html(res.text, page)
                 print(f"[DEBUG] found {len(urls)} article urls from {page}")
                 candidates.extend(urls)
         except Exception as e:
@@ -204,30 +255,23 @@ def main():
         time.sleep(0.5)
 
     # 중복 제거 (앞쪽 우선)
-    uniq = []
-    seen_urls = set()
+    uniq, s = [], set()
     for u in candidates:
-        if u not in seen_urls:
-            seen_urls.add(u)
-            uniq.append(u)
+        if u not in s:
+            s.add(u); uniq.append(u)
 
-    # 2) 신규만 필터
     new_urls = [u for u in uniq if article_id(u) not in seen]
     print(f"[DEBUG] total uniq: {len(uniq)}, new: {len(new_urls)}")
 
-    # 3) 보낼 목록 결정 (신규 없으면 상위 5개라도 보내기)
     send_urls = new_urls if new_urls else uniq[:5]
     if not send_urls:
         print("[ERROR] No article URLs extracted at all. Stop.")
         return
 
-    # 4) 슬랙 전송
     ok = post_to_slack(build_blocks(send_urls))
 
-    # 5) 성공 시 캐시 업데이트(신규만)
     if ok and new_urls:
-        for u in new_urls:
-            seen.add(article_id(u))
+        for u in new_urls: seen.add(article_id(u))
         save_seen(seen)
         print(f"[DEBUG] cache updated, total seen={len(seen)}")
     else:
